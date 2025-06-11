@@ -1,0 +1,6 @@
+s3
+https://hfcl-logging-s3-bucket-582a7ed4.s3.us-east-1.amazonaws.com/
+
+OpenSearch
+https://search-hfcl-logging-domain-eok2w7ublropwo5k5hehyvafiq.us-east-1.es.amazonaws.com
+
