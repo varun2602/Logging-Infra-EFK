@@ -221,9 +221,17 @@ module "lambda_functions"{
 
   runtime       = "python3.12"
   handler       = "main.handler"
+  # attach_policies = true 
+  timeout = 900
+  attach_policy_json = true 
+  # attach_policy_jsons = true 
+  # attach_policy_statements = true
   for_each = local.lambda_params 
   function_name = each.value.function_name
   source_path = each.value.source_path
+  # policies = list(jsonencode(each.value.policy))
+
+  policy_json = jsonencode(each.value.policy)
 }
 
 module "s3_buckets"{
@@ -247,11 +255,13 @@ module "aws-athena" {
   bucket_name               = local.athena_results_store_bucket_name
   create_database           = true
   database_force_destroy    = true
-
-  namespace                 = ""
-  stage                     = ""
-  queries                   = "" # or provide path to queries file
-  # create_table_sql_path   = "" # optional: path to your DDL SQL file
+  namespace                 = "athena-test-ns"
+  stage                     = "dev"
+  queries = {
+    "create_logs_table" = "./athena/createTable/create_logs_table.sql"
+    # Add more query files here if needed
+  }
+  
 
   depends_on = [
     module.s3_buckets["athena_results_bucket"]

@@ -16,3 +16,9 @@ output "lambda_functions" {
         lambda_function_name => lambda_function_url
   }
 }
+
+output "athena_params" {
+  description = "Athena parameters"
+  value = module.aws-athena.database_name
+  sensitive = true
+}

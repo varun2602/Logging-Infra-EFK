@@ -126,6 +126,7 @@ module "opensearch" {
 
 Outputs:
 
+
 lambda_functions = {
   "lambda_athena_query_params" = {
     "lambda_cloudwatch_log_group_arn" = "arn:aws:logs:ap-south-1:957833998600:log-group:/aws/lambda/lambda_athena_query"        
