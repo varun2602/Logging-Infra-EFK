@@ -9,12 +9,13 @@ output "opensearch_id" {
   value = module.opensearch.domain_endpoint
 }
 
-output "lambda_functions" {
-  description = "Lambda function names"
+output "lambda_athena_query_output" {
+  description = "Lambda function url"
   value = {
-    for lambda_function_name, lambda_function_url in module.lambda_functions:
-        lambda_function_name => lambda_function_url
+    name = module.lambda_athena_query.lambda_function_name
+    url = module.lambda_athena_query.lambda_function_url
   }
+  
 }
 
 output "athena_params" {

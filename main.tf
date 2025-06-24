@@ -120,56 +120,62 @@ module "step-functions" {
   name = "hfcl-athena-to-opensearch"
 
   definition = jsonencode({
-    StartAt = "RunAthenaQuery",
+    StartAt = "FailState",
     States = {
-      RunAthenaQuery = {
-        Type     = "Task",
-        Resource = module.lambda_functions["lambda_athena_query_params"].lambda_function_arn,
-        ResultPath = "$.queryResult",
-        Next     = "CheckQueryStatus"
+    {
+  "Comment": "A description of my state machine",
+  "StartAt": "Choice",
+  "States": {
+    "Choice": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Next": "Lambda Invoke"
+        },
+        {
+          "Next": "Glue StartJobRun"
+        }
+      ]
+    },
+    "Lambda Invoke": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Output": "{% $states.result.Payload %}",
+      "Arguments": {
+        "FunctionName": "",
+        "Payload": {
+          "dataScale": "",
+          "key2": "{% $states.input.key %}",
+          "key3": 100
+        }
       },
-
-      CheckQueryStatus = {
-        Type     = "Task",
-        Resource = module.lambda_functions["lambda_opensearch_transfer_params"].lambda_function_arn,
-        ResultPath = "$.checkResult",
-        Next     = "IsQueryDone"
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "Glue StartJobRun"
+    },
+    "Glue StartJobRun": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::glue:startJobRun",
+      "Arguments": {
+        "JobName": "myJobName"
       },
-
-      IsQueryDone = {
-        Type = "Choice",
-        Choices = [
-          {
-            Variable     = "$.checkResult.query_status",
-            StringEquals = "SUCCEEDED",
-            Next         = "TransferToOpenSearch"
-          },
-          {
-            Variable     = "$.checkResult.query_status",
-            StringEquals = "FAILED",
-            Next         = "FailState"
-          }
-        ],
-        Default = "WaitAndRetry"
-      },
-
-      WaitAndRetry = {
-        Type    = "Wait",
-        Seconds = 10,
-        Next    = "CheckQueryStatus"
-      },
-
-      TransferToOpenSearch = {
-        Type     = "Task",
-        Resource = module.lambda_functions["lambda_opensearch_transfer_params"].lambda_function_arn,
-        End      = true
-      },
-
-      FailState = {
-        Type    = "Fail",
-        Error   = "AthenaQueryFailed",
-        Cause   = "The Athena query failed."
-      }
+      "End": true
+    }
+  },
+  "QueryLanguage": "JSONata"
+}
     }
   })
 
@@ -179,10 +185,7 @@ module "step-functions" {
       effect = "Allow"
       actions = ["lambda:InvokeFunction"]
       resources = [
-        # module.lambda_athena_query.lambda_function_arn,
-        # module.lambda_opensearch_transfer.lambda_function_arn
-        for lambda in module.lambda_functions:
-            lambda.lambda_function_arn
+        module.lambda_athena_query.lambda_function_arn,
             
       ]
     }
@@ -190,49 +193,21 @@ module "step-functions" {
 
   create_role = true
   depends_on = [
-    module.lambda_functions["lambda_athena_query_params"],
-    module.lambda_functions["lambda_opensearch_transfer_params"]
+    module.lambda_athena_query,
+    module.glue
   ]
 }
 
-# module "lambda_athena_query" {
-#   source  = "terraform-aws-modules/lambda/aws"
-#   version = "7.20.2"
-
-#   function_name = "lambda-athena-query"
-#   runtime       = "python3.12"
-#   handler       = "main.handler"
-#   source_path = "./lambda/lambda_athena_query"
-# }
-
-# module "lambda_opensearch_transfer" {
-#   source  = "terraform-aws-modules/lambda/aws"
-#   version = "7.20.2"
-
-#   function_name = "transfer-to-opensearch"
-#   runtime       = "python3.12"
-#   handler       = "main.handler"
-#   source_path = "./lambda/lambda_opensearch_transfer"
-# }
-
-module "lambda_functions"{
+module "lambda_athena_query" {
   source  = "terraform-aws-modules/lambda/aws"
   version = "7.20.2"
 
+  function_name = "lambda-athena-query"
   runtime       = "python3.12"
   handler       = "main.handler"
-  # attach_policies = true 
-  timeout = 900
-  attach_policy_json = true 
-  # attach_policy_jsons = true 
-  # attach_policy_statements = true
-  for_each = local.lambda_params 
-  function_name = each.value.function_name
-  source_path = each.value.source_path
-  # policies = list(jsonencode(each.value.policy))
-
-  policy_json = jsonencode(each.value.policy)
+  source_path = "./lambda/lambda_athena_query"
 }
+
 
 module "s3_buckets"{
   source  = "terraform-aws-modules/s3-bucket/aws"
@@ -266,4 +241,9 @@ module "aws-athena" {
   depends_on = [
     module.s3_buckets["athena_results_bucket"]
   ]
+}
+
+module "glue" {
+  source  = "cloudposse/glue/aws"
+  version = "0.4.0"
 }
