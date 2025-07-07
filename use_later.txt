@@ -127,87 +127,58 @@ module "opensearch" {
 Outputs:
 
 
-lambda_functions = {
-  "lambda_athena_query_params" = {
-    "lambda_cloudwatch_log_group_arn" = "arn:aws:logs:ap-south-1:957833998600:log-group:/aws/lambda/lambda_athena_query"        
-    "lambda_cloudwatch_log_group_name" = "/aws/lambda/lambda_athena_query"
-    "lambda_event_source_mapping_arn" = {}
-    "lambda_event_source_mapping_function_arn" = {}
-    "lambda_event_source_mapping_state" = {}
-    "lambda_event_source_mapping_state_transition_reason" = {}
-    "lambda_event_source_mapping_uuid" = {}
-    "lambda_function_arn" = "arn:aws:lambda:ap-south-1:957833998600:function:lambda_athena_query"
-    "lambda_function_arn_static" = "arn:aws:lambda:ap-south-1:957833998600:function:lambda_athena_query"
-    "lambda_function_invoke_arn" = "arn:aws:apigateway:ap-south-1:lambda:path/2015-03-31/functions/arn:aws:lambda:ap-south-1:957833998600:function:lambda_athena_query/invocations"
-    "lambda_function_kms_key_arn" = ""
-    "lambda_function_last_modified" = "2025-06-09T10:27:47.761+0000"
-    "lambda_function_name" = "lambda_athena_query"
-    "lambda_function_qualified_arn" = "arn:aws:lambda:ap-south-1:957833998600:function:lambda_athena_query:$LATEST"
-    "lambda_function_qualified_invoke_arn" = "arn:aws:apigateway:ap-south-1:lambda:path/2015-03-31/functions/arn:aws:lambda:ap-south-1:957833998600:function:lambda_athena_query:$LATEST/invocations"
-    "lambda_function_signing_job_arn" = ""
-    "lambda_function_signing_profile_version_arn" = ""
-    "lambda_function_source_code_hash" = "fZ1uaMNulXwHuOgas+ZcSLgXu7lMihrQnQ632IT/kcw="
-    "lambda_function_source_code_size" = 649
-    "lambda_function_url" = ""
-    "lambda_function_url_id" = ""
-    "lambda_function_version" = "$LATEST"
-    "lambda_layer_arn" = ""
-    "lambda_layer_created_date" = ""
-    "lambda_layer_layer_arn" = ""
-    "lambda_layer_source_code_size" = ""
-    "lambda_layer_version" = ""
-    "lambda_role_arn" = "arn:aws:iam::957833998600:role/lambda_athena_query"
-    "lambda_role_name" = "lambda_athena_query"
-    "lambda_role_unique_id" = "AROA56A226EEAVWF6BYPW"
-    "local_filename" = "builds\\bdcfb2ebc2b7669c42389be00d4a05b22fda15eaece430c6eed0c0d13fbf757b.zip"
-    "s3_object" = {
-      "bucket" = tostring(null)
-      "key" = tostring(null)
-      "version_id" = null
-    }
-  }
-  "lambda_opensearch_transfer_params" = {
-    "lambda_cloudwatch_log_group_arn" = "arn:aws:logs:ap-south-1:957833998600:log-group:/aws/lambda/transfer-to-opensearch"     
-    "lambda_cloudwatch_log_group_name" = "/aws/lambda/transfer-to-opensearch"
-    "lambda_event_source_mapping_arn" = {}
-    "lambda_event_source_mapping_function_arn" = {}
-    "lambda_event_source_mapping_state" = {}
-    "lambda_event_source_mapping_state_transition_reason" = {}
-    "lambda_event_source_mapping_uuid" = {}
-    "lambda_function_arn" = "arn:aws:lambda:ap-south-1:957833998600:function:transfer-to-opensearch"
-    "lambda_function_arn_static" = "arn:aws:lambda:ap-south-1:957833998600:function:transfer-to-opensearch"
-    "lambda_function_invoke_arn" = "arn:aws:apigateway:ap-south-1:lambda:path/2015-03-31/functions/arn:aws:lambda:ap-south-1:957833998600:function:transfer-to-opensearch/invocations"
-    "lambda_function_kms_key_arn" = ""
-    "lambda_function_last_modified" = "2025-06-09T10:27:42.083+0000"
-    "lambda_function_name" = "transfer-to-opensearch"
-    "lambda_function_qualified_arn" = "arn:aws:lambda:ap-south-1:957833998600:function:transfer-to-opensearch:$LATEST"
-    "lambda_function_qualified_invoke_arn" = "arn:aws:apigateway:ap-south-1:lambda:path/2015-03-31/functions/arn:aws:lambda:ap-south-1:957833998600:function:transfer-to-opensearch:$LATEST/invocations"
-    "lambda_function_signing_job_arn" = ""
-    "lambda_function_signing_profile_version_arn" = ""
-    "lambda_function_source_code_hash" = "vOvUvom61F7dl4zIR1JqQ68WQPtOQZZoI7+WS6n2LEk="
-    "lambda_function_source_code_size" = 208
-    "lambda_function_url" = ""
-    "lambda_function_url_id" = ""
-    "lambda_function_version" = "$LATEST"
-    "lambda_layer_arn" = ""
-    "lambda_layer_created_date" = ""
-    "lambda_layer_layer_arn" = ""
-    "lambda_layer_source_code_size" = ""
-    "lambda_layer_version" = ""
-    "lambda_role_arn" = "arn:aws:iam::957833998600:role/transfer-to-opensearch"
-    "lambda_role_name" = "transfer-to-opensearch"
-    "lambda_role_unique_id" = "AROA56A226EEF3GUZ5GAV"
-    "local_filename" = "builds\\68ea737492f0d6547b5ca6e6d0222edbe8277be6d258a0ef2ea9ce4d03cd6f03.zip"
-    "s3_object" = {
-      "bucket" = tostring(null)
-      "key" = tostring(null)
-      "version_id" = null
-    }
-  }
+
+athena_params = <sensitive>
+lambda_athena_query_output = {
+  "name" = "lambda-athena-query"
+  "url" = ""
 }
 opensearch_id = "search-hfcl-logging-domain-a4m6rzy4s3fqhtdnobcpnuk2dm.ap-south-1.es.amazonaws.com"
 s3_buckets = {
   "athena_results_bucket" = "http://athena-results-store-bucket-5445463d.s3.amazonaws.com"
   "logging_bucket" = "http://hfcl-logging-s3-bucket-5445463d.s3.amazonaws.com"
 }
-PS D:\cs50\Cloud Solutions Architecture\Terraform\hfcl_logging_infra> 
+
+{
+  "Comment": "A description of my state machine",
+  "StartAt": "CheckTransferState",
+  "States": {
+    "CheckTransferState": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.queryMode",
+          "StringEquals": "querySome",
+          "Next": "StartAthenaQuery"
+        },
+        {
+          "Variable": "$.querymode",
+          "StringEquals": "queryAll",
+          "Next": "GlueStartJobRun"
+        }
+      ],
+      "Default": "GlueStartJobRun"
+    },
+    "StartAthenaQuery": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+      "Parameters": {
+        "QueryString": "$.queryString",
+        "WorkGroup": "primary",
+        "ResultConfiguration": {
+          "OutputLocation": "s3://amzn-s3-demo-bucket"
+        }
+      },
+      "Next": "GlueStartJobRun"
+    },
+    "GlueStartJobRun": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::glue:startJobRun",
+      "Parameters": {
+        "JobName": "$.queryMode"
+      },
+      "End": true
+    }
+  },
+  "QueryLanguage": "JSONPath"
+}

@@ -119,95 +119,60 @@ module "step-functions" {
   version = "2.5.2"
   name = "hfcl-athena-to-opensearch"
 
-  definition = jsonencode({
-    StartAt = "FailState",
-    States = {
-    {
+ definition = jsonencode(
+  {
   "Comment": "A description of my state machine",
-  "StartAt": "Choice",
+  "QueryLanguage": "JSONPath",
+  "StartAt": "CheckTransferState",
   "States": {
-    "Choice": {
-      "Type": "Choice",
+    "CheckTransferState": {
       "Choices": [
         {
-          "Next": "Lambda Invoke"
+          "Next": "StartAthenaQuery",
+          "StringEquals": "querySome",
+          "Variable": "$.queryMode"
         },
         {
-          "Next": "Glue StartJobRun"
-        }
-      ]
-    },
-    "Lambda Invoke": {
-      "Type": "Task",
-      "Resource": "arn:aws:states:::lambda:invoke",
-      "Output": "{% $states.result.Payload %}",
-      "Arguments": {
-        "FunctionName": "",
-        "Payload": {
-          "dataScale": "",
-          "key2": "{% $states.input.key %}",
-          "key3": 100
-        }
-      },
-      "Retry": [
-        {
-          "ErrorEquals": [
-            "Lambda.ServiceException",
-            "Lambda.AWSLambdaException",
-            "Lambda.SdkClientException",
-            "Lambda.TooManyRequestsException"
-          ],
-          "IntervalSeconds": 1,
-          "MaxAttempts": 3,
-          "BackoffRate": 2,
-          "JitterStrategy": "FULL"
+          "Next": "GlueStartJobRun",
+          "StringEquals": "queryAll",
+          "Variable": "$.queryMode"
         }
       ],
-      "Next": "Glue StartJobRun"
+      "Default": "InvalidInputMode",
+      "Type": "Choice"
     },
-    "Glue StartJobRun": {
-      "Type": "Task",
-      "Resource": "arn:aws:states:::glue:startJobRun",
-      "Arguments": {
-        "JobName": "myJobName"
+    "GlueStartJobRun": {
+      "End": true,
+      "Parameters": {
+        "JobName.$": "$.queryMode"
       },
-      "End": true
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
+      "Type": "Task"
+    },
+    "InvalidInputMode": {
+      "Cause": "Invalid queryMode specified in input. Must be 'querySome' or 'queryAll'.",
+      "Error": "InvalidInput",
+      "Type": "Fail"
+    },
+    "StartAthenaQuery": {
+      "Next": "GlueStartJobRun",
+      "Parameters": {
+        "QueryString.$": "$.queryString",
+        "WorkGroup": "primary"
+      },
+      "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+      "Type": "Task"
     }
-  },
-  "QueryLanguage": "JSONata"
+  }
 }
-    }
-  })
-
-  attach_policy_statements = true
-  policy_statements = [
-    {
-      effect = "Allow"
-      actions = ["lambda:InvokeFunction"]
-      resources = [
-        module.lambda_athena_query.lambda_function_arn,
-            
-      ]
-    }
-  ]
-
+ 
+ )
+ 
   create_role = true
   depends_on = [
-    module.lambda_athena_query,
-    module.glue
+    module.glue_job
   ]
 }
-
-module "lambda_athena_query" {
-  source  = "terraform-aws-modules/lambda/aws"
-  version = "7.20.2"
-
-  function_name = "lambda-athena-query"
-  runtime       = "python3.12"
-  handler       = "main.handler"
-  source_path = "./lambda/lambda_athena_query"
-}
-
 
 module "s3_buckets"{
   source  = "terraform-aws-modules/s3-bucket/aws"
@@ -236,14 +201,28 @@ module "aws-athena" {
     "create_logs_table" = "./athena/createTable/create_logs_table.sql"
     # Add more query files here if needed
   }
-  
-
   depends_on = [
     module.s3_buckets["athena_results_bucket"]
   ]
 }
 
-module "glue" {
-  source  = "cloudposse/glue/aws"
-  version = "0.4.0"
+module "glue_job" {
+  source = "cloudposse/glue/aws//modules/glue-job"
+
+  job_name        = "LogTransmitt"
+  job_description = "Glue Job for processing geo data"
+  role_arn        = module.iam_role_for_glue_jobs.arn
+  glue_version    = "2.0" # Python Shell jobs generally use Glue 1.0 or 2.0 (Python 3)
+  default_arguments = {}
+
+
+  max_retries = 2
+  timeout     = 2000
+
+  command = {
+    name          = "pythonshell" # <-- CHANGE THIS FROM "glueetl" to "pythonshell"
+    script_location = format("s3://%s/glue_jobs_script/glue.py", module.s3_buckets["logging_bucket"].s3_bucket_id) 
+    python_version  = 3
+  }
+
 }

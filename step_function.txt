@@ -1,0 +1,67 @@
+{
+  "Comment": "A description of my state machine",
+  "StartAt": "CheckTransferState",
+  "States": {
+    "CheckTransferState": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.queryMode",
+          "StringEquals": "querySome",
+          "Next": "StartAthenaQuery"
+        },
+        {
+          "Variable": "$.queryMode",
+          "StringEquals": "queryAll",
+          "Next": "GlueStartJobRun"
+        }
+      ],
+      "Default": "InvalidInputMode"
+    },
+    "StartAthenaQuery": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+      "Parameters": {
+        "QueryString.$": "$.queryString",
+        "WorkGroup": "primary"
+      },
+      "Next": "GlueStartJobRun"
+    },
+    "GlueStartJobRun": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
+      "Parameters": {
+        "JobName.$": "$.queryMode"
+      },
+      "End": true
+    },
+    "InvalidInputMode": {
+      "Type": "Fail",
+      "Cause": "Invalid queryMode specified in input. Must be 'querySome' or 'queryAll'.",
+      "Error": "InvalidInput"
+    }
+  },
+  "QueryLanguage": "JSONPath"
+}
+
+Step function input json:
+
+QUERYALL MODE:
+{
+  "queryMode": "queryAll",
+  "sourceS3Path": "s3://your-raw-logs-bucket/logs/"
+  // The state machine doesn't explicitly use "sourceS3Path" in its parameters for GlueStartJobRun in this version,
+  // but your Glue job script would still expect it as an argument.
+}
+
+QUERYSOME MODE:
+{
+  "queryMode": "querySome",
+  "queryString": "SELECT * FROM your_glue_database.your_table_name LIMIT 100;",
+  "athenaOutputLocation": "s3://your-athena-results-bucket/query_output/"
+  // "athenaOutputLocation" is not consumed by Parameters in this specific ASL, but would be relevant for your Glue job's SOURCE_PATH.
+}
+
+Values:
+  queryMode: querySome or queryAll
+  queryString: **SQL query**
