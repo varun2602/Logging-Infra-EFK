@@ -147,7 +147,15 @@ module "iam_role_for_glue_jobs" {
             "es:DescribeElasticsearchDomainConfig"
           ]
           Resource = "${module.opensearch.domain_arn}/*" 
-        }
+        },
+        # { # ADD THIS BLOCK: Permissions to access the OpenSearch secret in Secrets Manager
+        #   Effect = "Allow"
+        #   Action = [
+        #     "secretsmanager:GetSecretValue",
+        #     "secretsmanager:DescribeSecret" # DescribeSecret is often useful for debugging/metadata
+        #   ]
+        #   Resource = module.secrets_manager_opensearch_secret.arn # Assuming you have a module for Secrets Manager
+        # }
       ]
     })
   ]

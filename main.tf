@@ -6,6 +6,24 @@ terraform {
     }
   }
 }
+
+resource "aws_s3_object" "glue_job_script_upload" {
+  bucket = module.s3_buckets["logging_bucket"].s3_bucket_id # The ID of your S3 bucket where logs/scripts go
+  key    = "glue_jobs_script/jobs.py"             # The remote path and filename in S3
+  source = "./glue_script/jobs.py"                             # The local path to your script file (assuming it's named glue.py locally)
+
+  # Optional: Add an ETag to trigger updates if the file content changes
+  etag = filemd5("./glue_script/jobs.py") # Use the MD5 hash of the local file content
+
+  # Optional: Content type (often "application/x-python" or "text/x-python")
+  content_type = "text/x-python"
+
+  # Ensure the bucket is created before attempting to upload
+  depends_on = [
+    module.s3_buckets["logging_bucket"]
+  ]
+}
+
  data "aws_caller_identity" "current" {
     
 }
@@ -144,7 +162,14 @@ module "step-functions" {
     "GlueStartJobRun": {
       "End": true,
       "Parameters": {
-        "JobName.$": "$.queryMode"
+        "JobName": "LogTransmitt", // <<-- IMPORTANT: Replace with the exact name of your Glue job (e.g., "LogTransmitt")
+        "Arguments": {
+          // Conditionally set --SOURCE_S3_PATH based on queryMode
+          "SOURCE_S3_PATH": "States.If($.queryMode == 'querySome', $.AthenaQueryResult.QueryExecution.ResultConfiguration.OutputLocation, 's3://hfcl-logging-s3-bucket-5445463d/logs')",
+          "OPENSEARCH_ENDPOINT": "${module.opensearch.domain_endpoint}", // <<-- Replace with your actual endpoint
+          "OPENSEARCH_INDEX": "timestamp",           // <<-- Replace with your actual target index
+          "OPENSEARCH_CONNECTION_NAME": "${resource.aws_glue_connection.opensearch_connection.name }"         // <<-- Your Glue Connection name
+        }
       },
       "Resource": "arn:aws:states:::glue:startJobRun.sync",
       "Type": "Task"
@@ -155,22 +180,23 @@ module "step-functions" {
       "Type": "Fail"
     },
     "StartAthenaQuery": {
-      "Next": "GlueStartJobRun",
+      "Next": "GlueStartJobRun", // Proceeds directly to GlueStartJobRun
       "Parameters": {
         "QueryString.$": "$.queryString",
         "WorkGroup": "primary"
       },
       "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
-      "Type": "Task"
+      "Type": "Task",
+      "ResultPath": "$.AthenaQueryResult" // <<-- CRITICAL: This is still needed to capture Athena's output
     }
   }
 }
- 
  )
  
   create_role = true
   depends_on = [
-    module.glue_job
+    module.glue_job,
+    resource.aws_glue_connection.opensearch_connection
   ]
 }
 
@@ -206,14 +232,43 @@ module "aws-athena" {
   ]
 }
 
+resource "aws_secretsmanager_secret" "logging_infra_secret" {
+  name = "example-secret"
+}
+
+resource "aws_secretsmanager_secret_version" "logging_infra_secret_version" {
+  secret_id = aws_secretsmanager_secret.logging_infra_secret.id
+  secret_string = jsonencode({
+    "opensearch.net.http.auth.user" = var.opensearch_master_user
+    "opensearch.net.http.auth.pass" = var.opensearch_master_pass
+  })
+}
+
+resource "aws_glue_connection" "opensearch_connection" {
+  name            = "opensearch-connection"
+  connection_type = "OPENSEARCH"
+  connection_properties = {
+    SparkProperties = jsonencode({
+      secretId                       = aws_secretsmanager_secret.logging_infra_secret.name
+      "opensearch.nodes"             = module.opensearch.domain_endpoint
+      "opensearch.port"              = "443"
+      "opensearch.aws.sigv4.region"  = var.region
+      "opensearch.nodes.wan.only"    = "true"
+      "opensearch.aws.sigv4.enabled" = "true"
+    })
+  }
+}
+
 module "glue_job" {
   source = "cloudposse/glue/aws//modules/glue-job"
 
   job_name        = "LogTransmitt"
   job_description = "Glue Job for processing geo data"
   role_arn        = module.iam_role_for_glue_jobs.arn
-  glue_version    = "2.0" # Python Shell jobs generally use Glue 1.0 or 2.0 (Python 3)
+  glue_version    = "2.0"
   default_arguments = {}
+  # Add the new OpenSearch connection to the Glue job
+  connections     = ["opensearch-connection"]
 
 
   max_retries = 2
@@ -221,8 +276,10 @@ module "glue_job" {
 
   command = {
     name          = "pythonshell" # <-- CHANGE THIS FROM "glueetl" to "pythonshell"
-    script_location = format("s3://%s/glue_jobs_script/glue.py", module.s3_buckets["logging_bucket"].s3_bucket_id) 
+    script_location = format("s3://%s/glue_jobs_script/jobs.py", module.s3_buckets["logging_bucket"].s3_bucket_id)
     python_version  = 3
   }
+
+  depends_on = [ resource.aws_glue_connection.opensearch_connection ]
 
 }

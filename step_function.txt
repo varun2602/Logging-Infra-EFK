@@ -1,47 +1,55 @@
 {
   "Comment": "A description of my state machine",
+  "QueryLanguage": "JSONPath",
   "StartAt": "CheckTransferState",
   "States": {
     "CheckTransferState": {
-      "Type": "Choice",
       "Choices": [
         {
-          "Variable": "$.queryMode",
+          "Next": "StartAthenaQuery",
           "StringEquals": "querySome",
-          "Next": "StartAthenaQuery"
+          "Variable": "$.queryMode"
         },
         {
-          "Variable": "$.queryMode",
+          "Next": "GlueStartJobRun",
           "StringEquals": "queryAll",
-          "Next": "GlueStartJobRun"
+          "Variable": "$.queryMode"
         }
       ],
-      "Default": "InvalidInputMode"
+      "Default": "InvalidInputMode",
+      "Type": "Choice"
+    },
+    "GlueStartJobRun": {
+      "End": true,
+      "Parameters": {
+        "JobName": "LogTransmitt", // <<-- IMPORTANT: Replace with the exact name of your Glue job (e.g., "LogTransmitt")
+        "Arguments": {
+          // Conditionally set --SOURCE_S3_PATH based on queryMode
+          "--SOURCE_S3_PATH.$": "States.If($.queryMode == 'querySome', $.AthenaQueryResult.QueryExecution.ResultConfiguration.OutputLocation, 's3://hfcl-logging-s3-bucket-5445463d/')",
+          "--OPENSEARCH_ENDPOINT": "your-opensearch-domain-endpoint-here", // <<-- Replace with your actual endpoint
+          "--OPENSEARCH_INDEX": "your-target-opensearch-index",           // <<-- Replace with your actual target index
+          "--OPENSEARCH_CONNECTION_NAME": "Opensearch connection"          // <<-- Your Glue Connection name
+        }
+      },
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
+      "Type": "Task"
+    },
+    "InvalidInputMode": {
+      "Cause": "Invalid queryMode specified in input. Must be 'querySome' or 'queryAll'.",
+      "Error": "InvalidInput",
+      "Type": "Fail"
     },
     "StartAthenaQuery": {
-      "Type": "Task",
-      "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+      "Next": "GlueStartJobRun", // Proceeds directly to GlueStartJobRun
       "Parameters": {
         "QueryString.$": "$.queryString",
         "WorkGroup": "primary"
       },
-      "Next": "GlueStartJobRun"
-    },
-    "GlueStartJobRun": {
+      "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
       "Type": "Task",
-      "Resource": "arn:aws:states:::glue:startJobRun.sync",
-      "Parameters": {
-        "JobName.$": "$.queryMode"
-      },
-      "End": true
-    },
-    "InvalidInputMode": {
-      "Type": "Fail",
-      "Cause": "Invalid queryMode specified in input. Must be 'querySome' or 'queryAll'.",
-      "Error": "InvalidInput"
+      "ResultPath": "$.AthenaQueryResult" // <<-- CRITICAL: This is still needed to capture Athena's output
     }
-  },
-  "QueryLanguage": "JSONPath"
+  }
 }
 
 Step function input json:

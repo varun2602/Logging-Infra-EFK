@@ -29,23 +29,3 @@ variable "logging_bucket_name" {
   type = string 
   sensitive = false
 }
-
-variable "lambda_opensearch_transfer_name" {
-  type = string 
-  sensitive = false 
-}
-
-variable "lambda_athena_query_name" {
-  type = string 
-  sensitive = false
-}
-
-variable "lambda_athena_query_source_path" {
-  type = string 
-  sensitive = false
-}
-
-variable "lambda_opensearch_transfer_source_path" {
-  type = string 
-  sensitive = false
-}
