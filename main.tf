@@ -24,9 +24,9 @@ resource "aws_s3_object" "glue_job_script_upload" {
   ]
 }
 
- data "aws_caller_identity" "current" {
-    
-}
+data "aws_caller_identity" "current" {}
+
+data "aws_region" "current" {}
 
 resource "random_id" "suffix" {
   byte_length = 4
@@ -192,8 +192,10 @@ module "step-functions" {
   }
 }
  )
- 
+ attach_policy_json = true
   create_role = true
+  # policy_statements = local.policy_statements_for_step_function
+  policy_json = local.step_functions_full_policy_json
   depends_on = [
     module.glue_job,
     resource.aws_glue_connection.opensearch_connection
@@ -265,7 +267,7 @@ module "glue_job" {
   job_name        = "LogTransmitt"
   job_description = "Glue Job for processing geo data"
   role_arn        = module.iam_role_for_glue_jobs.arn
-  glue_version    = "2.0"
+  glue_version    = "4.0"
   default_arguments = {}
   # Add the new OpenSearch connection to the Glue job
   connections     = ["opensearch-connection"]
