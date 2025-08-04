@@ -73,3 +73,12 @@ QUERYSOME MODE:
 Values:
   queryMode: querySome or queryAll
   queryString: **SQL query**
+
+{
+  "queryMode": "queryAll",
+  "JOB_NAME": "LogTransmitt",
+  "SOURCE_S3_PATH": "s3://hfcl-logging-s3-bucket-5445463d/logs/",
+  "OPENSEARCH_ENDPOINT": "https://search-hfcl-logging-domain-a4m6rzy4s3fqhtdnobcpnuk2dm.ap-south-1.es.amazonaws.com",
+  "OPENSEARCH_INDEX": "timestamp",
+  "OPENSEARCH_CONNECTION_NAME": "opensearch-connection"
+}

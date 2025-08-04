@@ -112,6 +112,14 @@ module "iam_role_for_glue_jobs" {
       Version = "2012-10-17"
       Statement = [
         {
+        Effect   = "Allow"
+        Action   = [
+          "secretsmanager:GetSecretValue",
+          # Potentially other secretsmanager actions if needed, e.g., "secretsmanager:DescribeSecret"
+        ]
+        Resource = aws_secretsmanager_secret.logging_infra_secret.arn # Grants access to your specific secret
+        },
+        {
           Effect = "Allow"
           Action = [
             "s3:GetObject",

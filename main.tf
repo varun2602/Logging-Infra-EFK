@@ -111,16 +111,32 @@ module "opensearch" {
   # })
  access_policies = jsonencode({
   Version = "2012-10-17",
-  Statement = [
-    {
-      Effect = "Allow",
-      Principal = {
-        AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+   Statement = [
+      # Existing statement for the Root user
+      {
+        Effect = "Allow",
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        },
+        Action = "es:*",
+        Resource = "arn:aws:es:${var.region}:${data.aws_caller_identity.current.account_id}:domain/${local.opensearch_domain_name}/*"
       },
-      Action = "es:*",
-      Resource = "arn:aws:es:${var.region}:${data.aws_caller_identity.current.account_id}:domain/${local.opensearch_domain_name}/*"
-    }
-  ]
+      # *** THIS IS THE CRUCIAL NEW STATEMENT FOR YOUR GLUE JOB'S IAM ROLE ***
+      {
+        Effect = "Allow",
+        Principal = {
+          AWS = module.iam_role_for_glue_jobs.arn # <--- Use the ARN of your Glue Job's IAM role here
+        },
+        Action = [
+          "es:ESHttp*", # Allows all HTTP operations (PUT, POST, GET, HEAD, DELETE).
+                       # This is usually sufficient for data ingestion.
+                       # You can be more granular if needed (e.g., "es:ESHttpPut", "es:ESHttpPost").
+        ],
+        Resource = "arn:aws:es:${var.region}:${data.aws_caller_identity.current.account_id}:domain/${local.opensearch_domain_name}/*"
+        # Optional: If you want to restrict access to only a specific index:
+        # Resource = "arn:aws:es:${var.region}:${data.aws_caller_identity.current.account_id}:domain/${local.opensearch_domain_name}/timestamp/*"
+      }
+    ]
 })
 
 
@@ -161,16 +177,30 @@ module "step-functions" {
     },
     "GlueStartJobRun": {
       "End": true,
+      # "Parameters": {
+      #   "JobName": "LogTransmitt", // <<-- IMPORTANT: Replace with the exact name of your Glue job (e.g., "LogTransmitt")
+      #   "Arguments": {
+      #     // Conditionally set --SOURCE_S3_PATH based on queryMode
+      #     "SOURCE_S3_PATH": "States.If($.queryMode == 'querySome', $.AthenaQueryResult.QueryExecution.ResultConfiguration.OutputLocation, 's3://hfcl-logging-s3-bucket-5445463d/logs')",
+      #     "OPENSEARCH_ENDPOINT": "${module.opensearch.domain_endpoint}", // <<-- Replace with your actual endpoint
+      #     "OPENSEARCH_INDEX": "timestamp",           // <<-- Replace with your actual target index
+      #     "OPENSEARCH_CONNECTION_NAME": "${resource.aws_glue_connection.opensearch_connection.name }"         // <<-- Your Glue Connection name
+      #   }
+      # },
       "Parameters": {
-        "JobName": "LogTransmitt", // <<-- IMPORTANT: Replace with the exact name of your Glue job (e.g., "LogTransmitt")
-        "Arguments": {
-          // Conditionally set --SOURCE_S3_PATH based on queryMode
-          "SOURCE_S3_PATH": "States.If($.queryMode == 'querySome', $.AthenaQueryResult.QueryExecution.ResultConfiguration.OutputLocation, 's3://hfcl-logging-s3-bucket-5445463d/logs')",
-          "OPENSEARCH_ENDPOINT": "${module.opensearch.domain_endpoint}", // <<-- Replace with your actual endpoint
-          "OPENSEARCH_INDEX": "timestamp",           // <<-- Replace with your actual target index
-          "OPENSEARCH_CONNECTION_NAME": "${resource.aws_glue_connection.opensearch_connection.name }"         // <<-- Your Glue Connection name
-        }
-      },
+            // It's a good practice to map JobName from input as well if you're providing it in invocation
+            "JobName.$": "$.JOB_NAME", // <--- CHANGE: Get JobName from Step Function input
+
+            "Arguments": {
+              // --- CHANGES HERE: Map arguments directly from Step Function input ---
+              "SOURCE_S3_PATH.$": "$.SOURCE_S3_PATH",
+              "OPENSEARCH_ENDPOINT.$": "$.OPENSEARCH_ENDPOINT",
+              "OPENSEARCH_INDEX.$": "$.OPENSEARCH_INDEX",
+              "OPENSEARCH_CONNECTION_NAME.$": "$.OPENSEARCH_CONNECTION_NAME"
+              // If you have other static arguments for Glue, you can still add them here
+              // e.g., "SOME_STATIC_ARGUMENT": "value"
+            }
+          },
       "Resource": "arn:aws:states:::glue:startJobRun.sync",
       "Type": "Task"
     },
@@ -197,7 +227,7 @@ module "step-functions" {
   # policy_statements = local.policy_statements_for_step_function
   policy_json = local.step_functions_full_policy_json
   depends_on = [
-    module.glue_job,
+    aws_glue_job.log_transmitt_glue_job,
     resource.aws_glue_connection.opensearch_connection
   ]
 }
@@ -235,7 +265,7 @@ module "aws-athena" {
 }
 
 resource "aws_secretsmanager_secret" "logging_infra_secret" {
-  name = "example-secret"
+  name = "logging-infra-secret"
 }
 
 resource "aws_secretsmanager_secret_version" "logging_infra_secret_version" {
@@ -261,27 +291,63 @@ resource "aws_glue_connection" "opensearch_connection" {
   }
 }
 
-module "glue_job" {
-  source = "cloudposse/glue/aws//modules/glue-job"
+resource "aws_glue_job" "log_transmitt_glue_job" {
+  name        = "LogTransmitt"
+  description = "Glue ETL Job for processing logs via Spark to OpenSearch"
+  role_arn    = module.iam_role_for_glue_jobs.arn
 
-  job_name        = "LogTransmitt"
-  job_description = "Glue Job for processing geo data"
-  role_arn        = module.iam_role_for_glue_jobs.arn
-  glue_version    = "4.0"
-  default_arguments = {}
-  # Add the new OpenSearch connection to the Glue job
-  connections     = ["opensearch-connection"]
+  glue_version      = "4.0"
+  worker_type       = "Standard"
+  number_of_workers = 2
 
-
-  max_retries = 2
-  timeout     = 2000
-
-  command = {
-    name          = "pythonshell" # <-- CHANGE THIS FROM "glueetl" to "pythonshell"
-    script_location = format("s3://%s/glue_jobs_script/jobs.py", module.s3_buckets["logging_bucket"].s3_bucket_id)
+  command {
+    name            = "glueetl"
+    script_location = "s3://${aws_s3_object.glue_job_script_upload.bucket}/${aws_s3_object.glue_job_script_upload.key}"
     python_version  = 3
   }
 
-  depends_on = [ resource.aws_glue_connection.opensearch_connection ]
+  connections = [resource.aws_glue_connection.opensearch_connection.name]
+  max_retries = 0
+  timeout     = 10
 
+  default_arguments = {
+    "--TempDir": format("s3://%s/glue_tmp/", module.s3_buckets["logging_bucket"].s3_bucket_id),
+  }
+
+  tags = {
+    Name        = "LogTransmitt"
+    Environment = "dev"
+  }
+
+  depends_on = [
+    aws_s3_object.glue_job_script_upload,
+    aws_glue_connection.opensearch_connection,
+    module.iam_role_for_glue_jobs
+  ]
 }
+
+# module "glue_job" {
+#   source = "cloudposse/glue/aws//modules/glue-job"
+#   version = "0.4.0"
+
+#   job_name        = "LogTransmitt"
+#   job_description = "Glue Job for processing geo data"
+#   role_arn        = module.iam_role_for_glue_jobs.arn
+#   glue_version    = "4.0"
+#   default_arguments = {}
+#   # Add the new OpenSearch connection to the Glue job
+#   connections     = ["opensearch-connection"]
+
+
+#   max_retries = 2
+#   timeout     = 2000
+
+#   command = {
+#     name          = "pythonshell" # <-- CHANGE THIS FROM "glueetl" to "pythonshell"
+#     script_location = format("s3://%s/glue_jobs_script/jobs.py", module.s3_buckets["logging_bucket"].s3_bucket_id)
+#     python_version  = 3
+#   }
+
+#   depends_on = [ resource.aws_glue_connection.opensearch_connection ]
+#   # context = module.this.context
+# }

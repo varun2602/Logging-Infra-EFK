@@ -2,7 +2,7 @@ output "s3_buckets" {
   description = "URLs of S3 buckets"
   value = {
     for bucket_key, bucket_module in module.s3_buckets:
-        bucket_key => "http://${bucket_module.s3_bucket_bucket_domain_name}"
+        bucket_key => "s3://${bucket_module.s3_bucket_bucket_domain_name}"
   }
 }
 output "opensearch_id" {
@@ -15,3 +15,4 @@ output "athena_params" {
   value = module.aws-athena.database_name
   sensitive = true
 }
+
