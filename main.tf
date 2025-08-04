@@ -8,17 +8,11 @@ terraform {
 }
 
 resource "aws_s3_object" "glue_job_script_upload" {
-  bucket = module.s3_buckets["logging_bucket"].s3_bucket_id # The ID of your S3 bucket where logs/scripts go
-  key    = "glue_jobs_script/jobs.py"             # The remote path and filename in S3
-  source = "./glue_script/jobs.py"                             # The local path to your script file (assuming it's named glue.py locally)
-
-  # Optional: Add an ETag to trigger updates if the file content changes
-  etag = filemd5("./glue_script/jobs.py") # Use the MD5 hash of the local file content
-
-  # Optional: Content type (often "application/x-python" or "text/x-python")
+  bucket = module.s3_buckets["logging_bucket"].s3_bucket_id 
+  key    = "glue_jobs_script/jobs.py"      
+  source = "./glue_script/jobs.py" 
+  etag = filemd5("./glue_script/jobs.py") 
   content_type = "text/x-python"
-
-  # Ensure the bucket is created before attempting to upload
   depends_on = [
     module.s3_buckets["logging_bucket"]
   ]
@@ -128,9 +122,7 @@ module "opensearch" {
           AWS = module.iam_role_for_glue_jobs.arn # <--- Use the ARN of your Glue Job's IAM role here
         },
         Action = [
-          "es:ESHttp*", # Allows all HTTP operations (PUT, POST, GET, HEAD, DELETE).
-                       # This is usually sufficient for data ingestion.
-                       # You can be more granular if needed (e.g., "es:ESHttpPut", "es:ESHttpPost").
+          "es:ESHttp*", 
         ],
         Resource = "arn:aws:es:${var.region}:${data.aws_caller_identity.current.account_id}:domain/${local.opensearch_domain_name}/*"
         # Optional: If you want to restrict access to only a specific index:
@@ -325,29 +317,3 @@ resource "aws_glue_job" "log_transmitt_glue_job" {
     module.iam_role_for_glue_jobs
   ]
 }
-
-# module "glue_job" {
-#   source = "cloudposse/glue/aws//modules/glue-job"
-#   version = "0.4.0"
-
-#   job_name        = "LogTransmitt"
-#   job_description = "Glue Job for processing geo data"
-#   role_arn        = module.iam_role_for_glue_jobs.arn
-#   glue_version    = "4.0"
-#   default_arguments = {}
-#   # Add the new OpenSearch connection to the Glue job
-#   connections     = ["opensearch-connection"]
-
-
-#   max_retries = 2
-#   timeout     = 2000
-
-#   command = {
-#     name          = "pythonshell" # <-- CHANGE THIS FROM "glueetl" to "pythonshell"
-#     script_location = format("s3://%s/glue_jobs_script/jobs.py", module.s3_buckets["logging_bucket"].s3_bucket_id)
-#     python_version  = 3
-#   }
-
-#   depends_on = [ resource.aws_glue_connection.opensearch_connection ]
-#   # context = module.this.context
-# }
